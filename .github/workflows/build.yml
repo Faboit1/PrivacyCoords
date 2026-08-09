@@ -13,13 +13,14 @@ jobs:
   build:
     name: Build plugin jar
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: "17"
           distribution: temurin
@@ -28,24 +29,44 @@ jobs:
       - name: Build
         run: mvn -B -ntp clean package
 
-      - name: Check the jar was shaded correctly
+      - name: Inspect the shaded jar
         run: |
+          set -euo pipefail
           jar=$(ls target/PrivacyCoords-*.jar)
-          echo "Built $jar"
-          # The plugin's own classes, its plugin.yml and a relocated PacketEvents must all be in there.
+          echo "Built $jar ($(du -h "$jar" | cut -f1))"
           unzip -l "$jar" > contents.txt
-          grep -q "dev/faboit/privacycoords/PrivacyCoordsPlugin.class" contents.txt
-          grep -q "plugin.yml" contents.txt
-          grep -q "config.yml" contents.txt
-          grep -q "dev/faboit/privacycoords/libs/packetevents/" contents.txt
-          # Nothing may still sit under the original PacketEvents package names.
-          if grep -qE "^\s+[0-9]+.*(com|io)/github/retrooper/packetevents/" contents.txt; then
-            echo "PacketEvents was not relocated"
-            exit 1
-          fi
+
+          fail() { echo "::error::$1"; exit 1; }
+
+          # The plugin's own classes and resources have to be there.
+          grep -q "dev/faboit/privacycoords/PrivacyCoordsPlugin.class" contents.txt \
+            || fail "the plugin's main class is missing from the jar"
+          grep -q " config.yml$" contents.txt || fail "config.yml is missing from the jar"
+
+          # The plugin.yml in the jar must be ours - PacketEvents ships one too, and if its
+          # copy won the merge the server would try to load the wrong plugin entirely.
+          unzip -p "$jar" plugin.yml > plugin.yml.built
+          grep -q "^main: dev.faboit.privacycoords.PrivacyCoordsPlugin$" plugin.yml.built \
+            || { echo "--- plugin.yml in the jar ---"; cat plugin.yml.built; fail "plugin.yml is not ours"; }
+          grep -q "^name: PrivacyCoords$" plugin.yml.built || fail "plugin.yml name was not filtered in"
+
+          # PacketEvents must be present, and only under the relocated package.
+          grep -q "dev/faboit/privacycoords/libs/packetevents/" contents.txt \
+            || fail "the relocated PacketEvents is missing from the jar"
+          ! grep -qE "(com|io)/github/retrooper/packetevents/" contents.txt \
+            || fail "PacketEvents was not relocated"
+
+          # Things the server owns must not be duplicated inside a plugin jar. A bundled netty
+          # would shadow the pipeline PacketEvents hooks into; a bundled adventure clashes with
+          # Paper's own copy.
+          ! grep -qE "^\s+[0-9]+.*\sio/netty/" contents.txt || fail "netty was bundled into the jar"
+          ! grep -qE "^\s+[0-9]+.*\snet/kyori/adventure/(text/(Component|serializer/plain)|key)/" contents.txt \
+            || fail "adventure core was bundled into the jar"
+
+          echo "Jar contents look right."
 
       - name: Upload jar
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: PrivacyCoords
           path: target/PrivacyCoords-*.jar

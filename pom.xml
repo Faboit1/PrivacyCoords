@@ -84,6 +84,15 @@
                         </goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <artifactSet>
+                                <includes>
+                                    <!-- PacketEvents and nothing else. It drags in netty and adventure
+                                         transitively, but both of those belong to the server: a plugin jar
+                                         carrying its own netty would shadow the very pipeline PacketEvents
+                                         hooks into, and a second adventure clashes with Paper's. -->
+                                    <include>com.github.retrooper:*</include>
+                                </includes>
+                            </artifactSet>
                             <relocations>
                                 <!-- PacketEvents is shaded so the plugin is self contained. Relocating it
                                      keeps it from clashing with other plugins that bundle their own copy. -->
@@ -97,6 +106,16 @@
                                 </relocation>
                             </relocations>
                             <filters>
+                                <filter>
+                                    <artifact>com.github.retrooper:*</artifact>
+                                    <excludes>
+                                        <!-- PacketEvents ships its own plugin.yml; ours has to be the one
+                                             that ends up in the jar. -->
+                                        <exclude>plugin.yml</exclude>
+                                        <exclude>META-INF/maven/**</exclude>
+                                        <exclude>META-INF/versions/*/module-info.class</exclude>
+                                    </excludes>
+                                </filter>
                                 <filter>
                                     <artifact>*:*</artifact>
                                     <excludes>
