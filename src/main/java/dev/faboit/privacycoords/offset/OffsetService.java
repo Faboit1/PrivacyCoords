@@ -164,31 +164,35 @@ public final class OffsetService {
     // ------------------------------------------------------------------ rolling
 
     /**
-     * Picks a random chunk aligned offset inside the configured range, skipping any value whose
-     * absolute size is below {@code offset.minimum-distance}.
-     *
-     * <p>The allowed values are counted arithmetically rather than sampled by rejection, so a
-     * narrow range with a large minimum distance cannot spin.
+     * Picks a random aligned offset inside the configured range for each axis, skipping any value
+     * whose absolute size is below that axis' minimum distance.
      */
     private CoordinateOffset roll() {
         PrivacyCoordsConfig current = config;
-        int chunkX = rollAxis(current);
-        int chunkZ = rollAxis(current);
-        return CoordinateOffset.ofChunks(chunkX, chunkZ);
+        int alignment = current.getAlignment();
+        return CoordinateOffset.ofBlocks(
+                rollAxis(current.getXRange(), alignment),
+                rollAxis(current.getZRange(), alignment));
     }
 
-    private int rollAxis(PrivacyCoordsConfig current) {
-        int size = CoordinateOffset.CHUNK_SIZE;
+    /**
+     * Rolls one axis, in blocks.
+     *
+     * <p>Everything is done in units of {@code alignment} so the result is aligned by
+     * construction, and the allowed values are counted arithmetically rather than sampled by
+     * rejection, so a narrow range with a large minimum distance cannot spin.
+     */
+    private int rollAxis(PrivacyCoordsConfig.AxisRange range, int alignment) {
         // Round the bounds inwards so we never leave the configured block range.
-        int lowest = Math.floorDiv(current.getOffsetMin() + size - 1, size);
-        int highest = Math.floorDiv(current.getOffsetMax(), size);
+        int lowest = Math.floorDiv(range.getMin() + alignment - 1, alignment);
+        int highest = Math.floorDiv(range.getMax(), alignment);
         if (lowest > highest) {
             return 0;
         }
 
-        int forbidden = Math.floorDiv(current.getMinimumDistance() + size - 1, size);
+        int forbidden = Math.floorDiv(range.getMinimumDistance() + alignment - 1, alignment);
         if (forbidden <= 0) {
-            return lowest + random.nextInt(highest - lowest + 1);
+            return (lowest + random.nextInt(highest - lowest + 1)) * alignment;
         }
 
         int negativeEnd = Math.min(highest, -forbidden);
@@ -199,11 +203,12 @@ public final class OffsetService {
 
         if (total <= 0) {
             // The minimum distance rules out the whole range; fall back to the raw range.
-            return lowest + random.nextInt(highest - lowest + 1);
+            return (lowest + random.nextInt(highest - lowest + 1)) * alignment;
         }
 
         int pick = random.nextInt(total);
-        return pick < negativeCount ? lowest + pick : positiveStart + (pick - negativeCount);
+        int units = pick < negativeCount ? lowest + pick : positiveStart + (pick - negativeCount);
+        return units * alignment;
     }
 
     // ------------------------------------------------------------------ persistence

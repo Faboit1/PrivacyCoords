@@ -38,7 +38,7 @@ public final class PrivacyCoordsCommand implements CommandExecutor, TabCompleter
         String action = args.length == 0 ? "status" : args[0].toLowerCase(Locale.ROOT);
 
         if (action.equals("reload")) {
-            if (!sender.hasPermission("privacycoords.reload")) {
+            if (!config.canReload(sender)) {
                 sender.sendMessage(config.message("no-permission"));
                 return true;
             }
@@ -54,7 +54,7 @@ public final class PrivacyCoordsCommand implements CommandExecutor, TabCompleter
 
         Player target;
         if (args.length >= 2) {
-            if (!sender.hasPermission("privacycoords.others")) {
+            if (!config.canTargetOthers(sender)) {
                 sender.sendMessage(config.message("no-permission"));
                 return true;
             }
@@ -64,7 +64,7 @@ public final class PrivacyCoordsCommand implements CommandExecutor, TabCompleter
                 return true;
             }
         } else if (sender instanceof Player) {
-            if (!sender.hasPermission("privacycoords.use")) {
+            if (!config.canUse(sender)) {
                 sender.sendMessage(config.message("no-permission"));
                 return true;
             }
@@ -175,7 +175,7 @@ public final class PrivacyCoordsCommand implements CommandExecutor, TabCompleter
                 }
             }
         } else if (args.length == 2 && !args[0].equalsIgnoreCase("reload")
-                && sender.hasPermission("privacycoords.others")) {
+                && service.getConfig().canTargetOthers(sender)) {
             for (Player online : Bukkit.getOnlinePlayers()) {
                 if (online.getName().toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))) {
                     options.add(online.getName());

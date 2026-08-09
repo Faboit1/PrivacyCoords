@@ -44,26 +44,47 @@ The player is then kicked with a "reconnect to apply" message the moment they ch
 
 ## Configuration
 
-`config.yml` is documented inline. The parts worth knowing:
+Everything the plugin does is configurable, and `config.yml` documents each option inline. All of
+it is picked up by `/privacycoords reload` except `persistence.file`, which needs a restart.
 
-- `enabled-by-default` - whether new players get randomised coordinates without asking.
-- `offset.min` / `offset.max` - the range the random shift is drawn from, per axis, in blocks.
-  Defaults to `-10000` .. `10000`.
-- `offset.minimum-distance` - refuses to roll anything smaller than this, so a random roll cannot
-  land on a useless shift of 32 blocks.
-- `persistence.enabled` - remember each player's offset in `data.yml` so their coordinates look the
-  same every session.
-- `persistence.reroll-on-join` - roll a fresh offset on every login instead.
-- `apply.kick-on-change` - see above.
-- `messages.*` - every player facing string.
+| Key | What it controls |
+| --- | --- |
+| `enabled-by-default` | Whether new players get randomised coordinates without asking |
+| `offset.min` / `offset.max` | The range the shift is drawn from, in blocks (default `-10000`..`10000`) |
+| `offset.minimum-distance` | Refuses to roll anything smaller than this, so a roll cannot land on a useless 32 blocks |
+| `offset.alignment` | Rounds rolled offsets to a multiple of this (default 16 = one chunk; 512 lines up with region files) |
+| `offset.x.*` / `offset.z.*` | Per axis overrides of the three keys above |
+| `persistence.enabled` | Remember each player's offset so their coordinates look the same every session |
+| `persistence.reroll-on-join` | Roll a fresh offset on every login instead |
+| `persistence.file` | Where offsets are stored, relative to the plugin folder |
+| `apply.kick-on-change` | Kick on toggle so the change applies immediately - see above |
+| `apply.kick-message` | What the kick screen says |
+| `apply.notify-on-join` | Remind players on join that their coordinates are randomised |
+| `apply.notify-delay-ticks` | How long to wait before sending that reminder |
+| `permissions.use` / `.others` / `.reload` | Rename the permission nodes, or set one to `""` to give it to everybody |
+| `translate.*` | Which categories of packet get shifted - see below |
+| `advanced.chunk-data-fast-path` | Patch chunk coordinates in the packet buffer instead of decoding the column |
+| `advanced.clientbound-priority` / `.serverbound-priority` | Where the two listeners sit relative to other packet plugins |
+| `advanced.packetevents-update-checker` | Let the bundled PacketEvents check for its own updates |
+| `debug` | Log every assigned offset and any packet that could not be translated |
+| `messages.*` | Every player facing string |
 
-Offsets are always rounded to a multiple of 16. A shift that is not chunk aligned cannot be
-expressed in the packets that carry chunk coordinates, and would tear the client's world apart at
-every chunk border.
+The `translate` section has a switch for each category the plugin touches: `chunks`, `blocks`,
+`player`, `spawn-position`, `last-death-position`, `entities`, `entity-metadata`, `effects`,
+`particles`, `sounds`, `explosions`, `world-border`, `locator-bar`, and the two incoming ones,
+`client-movement` and `client-block-interaction`. They are all on by default and should stay that
+way - the offset is one consistent shift of the player's whole world, so switching a category off
+leaves that part at its real coordinates while everything around it has moved. They exist so the
+plugin can be narrowed down if it ever fights with another packet level plugin, and the console
+warns on startup if a structural one is off.
 
-The Y axis is deliberately never shifted: the client is told the world's height range once, and
-moving chunk sections outside of it breaks lighting and rendering. A base is given away by X and Z,
-not by Y.
+Offsets are always rounded to at least a multiple of 16. A shift that is not chunk aligned cannot
+be expressed in the packets that carry chunk coordinates, and would tear the client's world apart
+at every chunk border, so smaller values are rejected and non-multiples are rounded up.
+
+The Y axis is deliberately never shifted and there is no option to change that: the client is told
+the world's height range once, and moving chunk sections outside of it breaks lighting and
+rendering. A base is given away by X and Z, not by Y.
 
 ## Installing
 
@@ -82,6 +103,10 @@ mvn clean package
 ```
 
 The shaded jar lands in `target/PrivacyCoords-<version>.jar`.
+
+Every push and pull request also builds through the `Build` GitHub Actions workflow, which
+compiles the plugin, checks that the jar contains the plugin classes, `plugin.yml`, `config.yml`
+and a relocated copy of PacketEvents, and uploads the jar as a build artifact.
 
 ## How it works
 
