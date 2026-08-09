@@ -1,0 +1,85 @@
+# ============================================================================
+#  PrivacyCoords
+# ----------------------------------------------------------------------------
+#  Shifts the whole world sideways for a single player, on the network layer.
+#  The player's client - and therefore the F3 debug screen, the coordinates in
+#  any client side mod, screenshots, and everything a stream overlay can read -
+#  sees the shifted coordinates. The server keeps working with the real ones.
+#
+#  Nothing about the world changes: the offset is applied to every packet that
+#  carries a position, in both directions, so blocks, entities, sounds and
+#  particles all stay exactly where they belong relative to the player.
+# ============================================================================
+
+# Turn privacy coordinates on for every player as soon as they join.
+# Players can still switch it off with "/privacycoords disable" (unless you
+# take the privacycoords.use permission away from them).
+enabled-by-default: false
+
+offset:
+  # The random shift is picked from this range, for the X axis and for the Z
+  # axis independently. Both values are in blocks and may be negative.
+  #
+  # The result is always rounded to a multiple of 16 (one chunk) - a shift that
+  # is not chunk aligned would tear chunk borders apart on the client, so this
+  # is not optional.
+  min: -10000
+  max: 10000
+
+  # Never pick a shift smaller than this on an axis (absolute value). Without
+  # it a random roll could land on, say, 16 blocks, which hides nothing.
+  # Set to 0 to allow any value in the range above.
+  minimum-distance: 1000
+
+  # The Y axis is deliberately left alone. Shifting it would push chunk
+  # sections outside of the world height the client was told about, which
+  # breaks lighting and rendering. Your base is given away by X/Z, not by Y.
+
+persistence:
+  # Remember each player's offset in data.yml, so their coordinates look the
+  # same every time they log in. Turn this off to keep offsets in memory only.
+  enabled: true
+
+  # Roll a brand new offset every time a player joins, instead of reusing the
+  # stored one. More private, but your "home is at 8000, -3000" muscle memory
+  # resets every session.
+  reroll-on-join: false
+
+apply:
+  # Changing the offset while a player is connected cannot be done cleanly:
+  # their client has already cached a world full of chunks at the old
+  # coordinates, and the server will not resend chunks it believes the client
+  # already has. So a change always takes effect on the player's next login.
+  #
+  # With this set to true, /privacycoords enable|disable|reroll kicks the
+  # player straight away with the message below, so they can reconnect and
+  # have it applied immediately.
+  kick-on-change: false
+  kick-message: "&bPrivacyCoords&7: reconnect to apply your new coordinates."
+
+# Log every offset that gets assigned, plus a warning for packets that could
+# not be translated. Leave this off unless you are chasing a bug.
+debug: false
+
+messages:
+  prefix: "&b[PrivacyCoords] &r"
+  no-permission: "&cYou are not allowed to do that."
+  players-only: "&cOnly players can use that. Try /privacycoords <enable|disable> <player>."
+  unknown-player: "&cNo player named &f%player% &cis online."
+  usage: "&7Usage: &f/privacycoords <enable|disable|status|reroll|reload> [player]"
+  enabled: "&aPrivacy coordinates enabled.&r &7Applies on your next login."
+  disabled: "&ePrivacy coordinates disabled.&r &7Applies on your next login."
+  enabled-now: "&aPrivacy coordinates enabled."
+  disabled-now: "&ePrivacy coordinates disabled."
+  already-enabled: "&7Privacy coordinates are already enabled."
+  already-disabled: "&7Privacy coordinates are already disabled."
+  rerolled: "&aA new random offset has been rolled.&r &7Applies on your next login."
+  rerolled-other: "&7A new random offset has been rolled for &f%player%&7."
+  status-on: "&7Privacy coordinates: &aon&7. Your client is shifted by &fX %x% &7/ &fZ %z%&7."
+  status-on-pending: "&7Privacy coordinates: &aon&7, but not applied to this session yet."
+  status-off: "&7Privacy coordinates: &coff&7."
+  status-other: "&7%player% &8- &7%status%"
+  changed-other: "&7Privacy coordinates for &f%player%&7 are now %state%&7."
+  state-on: "&aenabled"
+  state-off: "&cdisabled"
+  reloaded: "&aConfiguration reloaded."
