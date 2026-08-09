@@ -1,0 +1,24 @@
+name: ${project.name}
+version: ${project.version}
+main: dev.faboit.privacycoords.PrivacyCoordsPlugin
+api-version: "1.13"
+author: faboit1
+description: ${project.description}
+load: STARTUP
+
+commands:
+  privacycoords:
+    description: Enable or disable randomised (private) coordinates.
+    usage: /privacycoords <enable|disable|status|reroll|reload> [player]
+    aliases: [pcoords, privacycoordinates]
+
+permissions:
+  privacycoords.use:
+    description: Allows a player to toggle privacy coordinates for themselves.
+    default: true
+  privacycoords.others:
+    description: Allows toggling privacy coordinates for other players.
+    default: op
+  privacycoords.reload:
+    description: Allows reloading the PrivacyCoords configuration.
+    default: op

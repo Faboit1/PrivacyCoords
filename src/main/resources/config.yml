@@ -1,0 +1,224 @@
+# ============================================================================
+#  PrivacyCoords
+# ----------------------------------------------------------------------------
+#  Shifts the whole world sideways for a single player, on the network layer.
+#  The player's client - and therefore the F3 debug screen, the coordinates in
+#  any client side mod, screenshots, and everything a stream overlay can read -
+#  sees the shifted coordinates. The server keeps working with the real ones.
+#
+#  Nothing about the world changes: the offset is applied to every packet that
+#  carries a position, in both directions, so blocks, entities, sounds and
+#  particles all stay exactly where they belong relative to the player.
+#
+#  Everything below can be changed with /privacycoords reload unless a comment
+#  says otherwise.
+# ============================================================================
+
+# Turn privacy coordinates on for every player as soon as they join.
+# Players can still switch it off with "/privacycoords disable" (unless you
+# take the use permission away from them).
+enabled-by-default: false
+
+
+# ============================================================================
+#  How big the shift is
+# ============================================================================
+offset:
+  # The random shift is drawn from this range, in blocks, independently for the
+  # X and the Z axis. Both values may be negative.
+  min: -10000
+  max: 10000
+
+  # Never roll a shift smaller than this on an axis (absolute value). Without
+  # it a random roll could land on, say, 16 blocks, which hides nothing.
+  # Set to 0 to allow any value in the range above.
+  minimum-distance: 1000
+
+  # Rolled offsets are rounded to a multiple of this many blocks.
+  #
+  # 16 (one chunk) is the smallest value that works and the default: a shift
+  # that is not chunk aligned cannot be expressed in the packets that carry
+  # chunk coordinates, so the client's world would tear apart at every chunk
+  # border. Larger values must themselves be a multiple of 16 - 512 lines the
+  # shift up with region file boundaries, for example. Anything else is
+  # rounded up to the next multiple of 16 and a warning is logged.
+  alignment: 16
+
+  # Per axis overrides. Delete a key to fall back to the shared value above,
+  # or use these to shift one axis harder than the other.
+  x:
+    min: -10000
+    max: 10000
+    minimum-distance: 1000
+  z:
+    min: -10000
+    max: 10000
+    minimum-distance: 1000
+
+  # The Y axis is deliberately left alone and there is no option to change it.
+  # Shifting it would push chunk sections outside of the world height the
+  # client was told about, which breaks lighting and rendering. Your base is
+  # given away by X/Z, not by Y.
+
+
+# ============================================================================
+#  Remembering offsets between sessions
+# ============================================================================
+persistence:
+  # Remember each player's preference and offset, so their coordinates look the
+  # same every time they log in. Turn this off to keep everything in memory.
+  enabled: true
+
+  # Roll a brand new offset every time a player joins, instead of reusing the
+  # stored one. More private, but your "home is at 8000, -3000" muscle memory
+  # resets every session.
+  reroll-on-join: false
+
+  # Where the offsets are stored, relative to this plugin's folder.
+  # Changing this needs a server restart.
+  file: data.yml
+
+
+# ============================================================================
+#  Applying a change
+# ============================================================================
+apply:
+  # Changing the offset while a player is connected cannot be done cleanly:
+  # their client has already cached a world full of chunks at the old
+  # coordinates, and the server will not resend chunks it believes the client
+  # already has. So a change always takes effect on the player's next login.
+  #
+  # With this set to true, /privacycoords enable|disable|reroll kicks the
+  # player straight away with the message below, so they can reconnect and
+  # have it applied immediately.
+  kick-on-change: false
+  kick-message: "&bPrivacyCoords&7: reconnect to apply your new coordinates."
+
+  # Remind a player when they join that their coordinates are being randomised.
+  notify-on-join: true
+
+  # How long to wait, in ticks, before sending that reminder. Sending it the
+  # instant a player joins often means it scrolls past the join messages.
+  notify-delay-ticks: 40
+
+
+# ============================================================================
+#  Permissions
+# ============================================================================
+#  Rename these if they clash with something, or point several of them at the
+#  same node. Setting one to "" gives that action to everybody.
+permissions:
+  use: privacycoords.use
+  others: privacycoords.others
+  reload: privacycoords.reload
+
+
+# ============================================================================
+#  Which packets get translated
+# ============================================================================
+#  Everything here is on by default and should stay that way. The offset is a
+#  single consistent shift of the player's whole world; switching a category
+#  off leaves that part of the world at its real coordinates while everything
+#  around it has moved, which the player will see as things being in the wrong
+#  place. These exist so you can narrow the plugin down if it ever fights with
+#  another packet level plugin - not as a performance dial.
+translate:
+  # Chunk data, chunk unload, view position, light updates, chunk biomes.
+  # Turning this off leaves the terrain at the real coordinates: do not.
+  chunks: true
+
+  # Block changes, multi block changes, block actions, break animations, block
+  # entity data, digging acknowledgements, the sign editor, beds.
+  blocks: true
+
+  # The player's own position, and vehicles they are riding.
+  player: true
+
+  # The world spawn - where the compass points.
+  spawn-position: true
+
+  # The last death position carried by join/respawn, which is what a recovery
+  # compass points at.
+  last-death-position: true
+
+  # Every entity spawn, teleport, position sync, minecart movement, damage
+  # source position and "face player".
+  entities: true
+
+  # Block positions stored inside entity metadata, such as the bed a player is
+  # sleeping in.
+  entity-metadata: true
+
+  # World events: door sounds, dispenser puffs, and so on.
+  effects: true
+  particles: true
+  sounds: true
+  explosions: true
+
+  # World border centre.
+  world-border: true
+
+  # The 1.21.6+ locator bar.
+  locator-bar: true
+
+  # Coming back the other way: movement the client reports, and the blocks it
+  # says it is placing, breaking, editing or querying. Turning either of these
+  # off while the clientbound side is on will desync the player badly.
+  client-movement: true
+  client-block-interaction: true
+
+
+# ============================================================================
+#  Advanced
+# ============================================================================
+advanced:
+  # Chunk data is the most frequent packet carrying a position. Rather than
+  # decoding a whole chunk column to change two numbers, the chunk X and Z are
+  # patched straight into the packet buffer - every version of that packet
+  # since 1.7 starts with those two plain ints. Set this to false to decode and
+  # rebuild the column instead, which is much slower but goes through
+  # PacketEvents' normal path.
+  chunk-data-fast-path: true
+
+  # PacketEvents listener priorities. The defaults mean "translate outgoing
+  # positions after every other plugin has produced them" and "translate
+  # incoming positions before anything else reads them", which is what you want
+  # unless another packet plugin needs to sit outside of that.
+  # One of: LOWEST, LOW, NORMAL, HIGH, HIGHEST, MONITOR.
+  clientbound-priority: HIGHEST
+  serverbound-priority: LOWEST
+
+  # Let the bundled PacketEvents check for its own updates on startup.
+  packetevents-update-checker: false
+
+# Log every offset that gets assigned, plus a warning for packets that could
+# not be translated. Leave this off unless you are chasing a bug.
+debug: false
+
+
+# ============================================================================
+#  Messages
+# ============================================================================
+messages:
+  prefix: "&b[PrivacyCoords] &r"
+  no-permission: "&cYou are not allowed to do that."
+  players-only: "&cOnly players can use that. Try /privacycoords <enable|disable> <player>."
+  unknown-player: "&cNo player named &f%player% &cis online."
+  usage: "&7Usage: &f/privacycoords <enable|disable|status|reroll|reload> [player]"
+  enabled: "&aPrivacy coordinates enabled.&r &7Applies on your next login."
+  disabled: "&ePrivacy coordinates disabled.&r &7Applies on your next login."
+  enabled-now: "&aPrivacy coordinates enabled."
+  disabled-now: "&ePrivacy coordinates disabled."
+  already-enabled: "&7Privacy coordinates are already enabled."
+  already-disabled: "&7Privacy coordinates are already disabled."
+  rerolled: "&aA new random offset has been rolled.&r &7Applies on your next login."
+  rerolled-other: "&7A new random offset has been rolled for &f%player%&7."
+  join-notice: "&7Your coordinates are randomised. What F3 shows is &fnot&7 where you are."
+  status-on: "&7Privacy coordinates: &aon&7. Your client is shifted by &fX %x% &7/ &fZ %z%&7."
+  status-on-pending: "&7Privacy coordinates: &aon&7, but not applied to this session yet."
+  status-off: "&7Privacy coordinates: &coff&7."
+  status-other: "&7%player% &8- &7%status%"
+  changed-other: "&7Privacy coordinates for &f%player%&7 are now %state%&7."
+  state-on: "&aenabled"
+  state-off: "&cdisabled"
+  reloaded: "&aConfiguration reloaded."
