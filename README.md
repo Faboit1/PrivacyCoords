@@ -92,9 +92,34 @@ rendering. A base is given away by X and Z, not by Y.
 2. Start the server. That's it - PacketEvents is bundled inside the jar, relocated so it cannot
    clash with other plugins that ship their own copy.
 
-Requires Java 17+ and a Spigot/Paper based server. PacketEvents supports 1.8 through current
-releases; PrivacyCoords is developed against modern versions and is most thoroughly exercised
-there.
+Requires Java 17+. Runs on **Spigot, Paper, Folia and Folia forks such as CanvasMC** from the same
+jar. PacketEvents supports 1.8 through current releases; PrivacyCoords is developed against modern
+versions and is most thoroughly exercised there.
+
+### Folia and CanvasMC
+
+The plugin declares `folia-supported: true`, so Folia and its forks will load it.
+
+Almost none of PrivacyCoords runs on a server thread in the first place, which is what makes it a
+comfortable fit for regionised multithreading: the two packet listeners run on Netty threads, they
+never touch a world, a chunk or an entity through the Bukkit API, and all the per-player state they
+share lives in concurrent maps behind a single volatile config reference. There is nothing for a
+region to own.
+
+The little that does need a thread goes through a `PlatformScheduler` that is picked at startup:
+
+| Work | Single threaded server | Regionised server |
+| --- | --- | --- |
+| Saving `data.yml` | async Bukkit task | `AsyncScheduler` |
+| Kicking on a setting change | main thread task | the player's `EntityScheduler` |
+| Messaging a player someone else changed | direct | the player's `EntityScheduler` |
+| The join reminder | delayed main thread task | the player's `EntityScheduler`, dropped if they leave |
+
+Which one is chosen depends on whether the regionised scheduler API exists, not on whether the
+server calls itself Folia - Paper has shipped that API since 1.20 and implements it correctly on a
+single main thread, and every Folia fork inherits it. So a fork this code has never heard of still
+gets the right behaviour, and Spigot falls back to the classic scheduler. The startup log says
+which one it picked.
 
 ## Building
 
@@ -105,8 +130,12 @@ mvn clean package
 The shaded jar lands in `target/PrivacyCoords-<version>.jar`.
 
 Every push and pull request also builds through the `Build` GitHub Actions workflow, which
-compiles the plugin, checks that the jar contains the plugin classes, `plugin.yml`, `config.yml`
-and a relocated copy of PacketEvents, and uploads the jar as a build artifact.
+compiles the plugin, checks that the jar contains the plugin classes, `plugin.yml` (ours, declaring
+`folia-supported`), `config.yml` and a relocated copy of PacketEvents, and uploads the jar as a
+build artifact.
+
+Pushing a `v*` tag runs the `Release` workflow, which builds the same jar and publishes it as a
+GitHub release.
 
 ## How it works
 

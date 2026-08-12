@@ -2,6 +2,7 @@ package dev.faboit.privacycoords.offset;
 
 import com.github.retrooper.packetevents.protocol.player.User;
 import dev.faboit.privacycoords.config.PrivacyCoordsConfig;
+import dev.faboit.privacycoords.platform.PlatformScheduler;
 import org.bukkit.plugin.Plugin;
 
 import java.util.HashMap;
@@ -22,6 +23,7 @@ import java.util.logging.Level;
 public final class OffsetService {
 
     private final Plugin plugin;
+    private final PlatformScheduler scheduler;
     private final OffsetStorage storage;
     private final Random random = new java.security.SecureRandom();
 
@@ -38,8 +40,10 @@ public final class OffsetService {
     private final AtomicBoolean saveScheduled = new AtomicBoolean();
     private volatile PrivacyCoordsConfig config;
 
-    public OffsetService(Plugin plugin, OffsetStorage storage, PrivacyCoordsConfig config) {
+    public OffsetService(Plugin plugin, PlatformScheduler scheduler, OffsetStorage storage,
+                         PrivacyCoordsConfig config) {
         this.plugin = plugin;
+        this.scheduler = scheduler;
         this.storage = storage;
         this.config = config;
         this.records.putAll(storage.load());
@@ -221,12 +225,12 @@ public final class OffsetService {
             return;
         }
         try {
-            plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            scheduler.runAsync(() -> {
                 saveScheduled.set(false);
                 storage.save(snapshot());
             });
-        } catch (IllegalStateException ex) {
-            // The scheduler refuses new tasks while the server is shutting down; save inline.
+        } catch (IllegalStateException | UnsupportedOperationException ex) {
+            // Schedulers refuse new tasks while the server is shutting down; save inline.
             saveScheduled.set(false);
             storage.save(snapshot());
         }

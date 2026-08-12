@@ -6,6 +6,10 @@ author: faboit1
 description: ${project.description}
 load: STARTUP
 
+# Folia and its forks (CanvasMC among them) refuse to load a plugin that has not
+# explicitly declared it can cope with regionised multithreading.
+folia-supported: true
+
 commands:
   privacycoords:
     description: Enable or disable randomised (private) coordinates.

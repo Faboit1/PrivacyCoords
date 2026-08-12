@@ -50,6 +50,10 @@ jobs:
             || { echo "--- plugin.yml in the jar ---"; cat plugin.yml.built; fail "plugin.yml is not ours"; }
           grep -q "^name: PrivacyCoords$" plugin.yml.built || fail "plugin.yml name was not filtered in"
 
+          # Folia and its forks refuse to load a plugin that has not declared this.
+          grep -q "^folia-supported: true$" plugin.yml.built \
+            || fail "plugin.yml does not declare folia-supported, so Folia/Canvas will not load it"
+
           # PacketEvents must be present, and only under the relocated package.
           grep -q "dev/faboit/privacycoords/libs/packetevents/" contents.txt \
             || fail "the relocated PacketEvents is missing from the jar"
