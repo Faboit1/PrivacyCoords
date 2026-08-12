@@ -10,6 +10,7 @@ import dev.faboit.privacycoords.offset.OffsetStorage;
 import dev.faboit.privacycoords.packet.ClientboundOffsetListener;
 import dev.faboit.privacycoords.packet.ServerboundOffsetListener;
 import dev.faboit.privacycoords.packet.SessionListener;
+import dev.faboit.privacycoords.platform.PlatformScheduler;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -25,6 +26,7 @@ import java.io.File;
  */
 public final class PrivacyCoordsPlugin extends JavaPlugin {
 
+    private PlatformScheduler scheduler;
     private OffsetService service;
     private PacketListenerCommon sessionListener;
     private PacketListenerCommon clientboundListener;
@@ -46,14 +48,15 @@ public final class PrivacyCoordsPlugin extends JavaPlugin {
         saveDefaultConfig();
         PrivacyCoordsConfig config = PrivacyCoordsConfig.load(getConfig(), getLogger());
 
+        scheduler = PlatformScheduler.detect(this);
         OffsetStorage storage = new OffsetStorage(
                 new File(getDataFolder(), config.getPersistenceFile()), getLogger());
-        service = new OffsetService(this, storage, config);
+        service = new OffsetService(this, scheduler, storage, config);
 
         registerPacketListeners(config);
         PacketEvents.getAPI().init();
 
-        getServer().getPluginManager().registerEvents(new JoinNoticeListener(this, service), this);
+        getServer().getPluginManager().registerEvents(new JoinNoticeListener(scheduler, service), this);
 
         PluginCommand command = getCommand("privacycoords");
         if (command != null) {
@@ -65,6 +68,8 @@ public final class PrivacyCoordsPlugin extends JavaPlugin {
                     + "but cannot be controlled.");
         }
 
+        getLogger().info("Running on " + PlatformScheduler.serverName() + ", scheduling for a "
+                + scheduler.describe() + " server.");
         getLogger().info("Ready. Coordinates are randomised "
                 + (config.isEnabledByDefault()
                 ? "for everyone by default."
@@ -73,6 +78,9 @@ public final class PrivacyCoordsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (scheduler != null) {
+            scheduler.cancelTasks();
+        }
         if (service != null) {
             service.saveNow();
             service.endAllSessions();
@@ -127,5 +135,10 @@ public final class PrivacyCoordsPlugin extends JavaPlugin {
 
     public OffsetService getService() {
         return service;
+    }
+
+    /** The scheduling model this server needs; see {@link PlatformScheduler}. */
+    public PlatformScheduler getScheduler() {
+        return scheduler;
     }
 }

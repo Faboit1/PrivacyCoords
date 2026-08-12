@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish, e.g. v1.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: "17"
+          distribution: temurin
+          cache: maven
+
+      - name: Work out the version
+        id: version
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag || github.ref_name }}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          pom=$(mvn -B -ntp -q help:evaluate -Dexpression=project.version -DforceStdout)
+          echo "pom=$pom" >> "$GITHUB_OUTPUT"
+          # The tag and the version in the pom have to agree, or the jar in the release would be
+          # named something other than the release itself.
+          if [ "${tag#v}" != "$pom" ]; then
+            echo "::error::tag $tag does not match the project version $pom in pom.xml"
+            exit 1
+          fi
+
+      - name: Build
+        run: mvn -B -ntp clean package
+
+      - name: Inspect the shaded jar
+        run: |
+          set -euo pipefail
+          jar=$(ls target/PrivacyCoords-*.jar)
+          unzip -p "$jar" plugin.yml > plugin.yml.built
+          fail() { echo "::error::$1"; exit 1; }
+          grep -q "^main: dev.faboit.privacycoords.PrivacyCoordsPlugin$" plugin.yml.built \
+            || fail "plugin.yml is not ours"
+          grep -q "^folia-supported: true$" plugin.yml.built || fail "folia-supported is missing"
+          grep -q "^version: ${{ steps.version.outputs.pom }}$" plugin.yml.built \
+            || fail "plugin.yml version does not match the pom"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.version.outputs.tag }}"
+          notes=$(mktemp)
+          cat > "$notes" <<'NOTES'
+          Randomised coordinates for Minecraft servers: a player with PrivacyCoords enabled sees
+          their whole world shifted by a random amount, so pressing F3 on stream shows coordinates
+          that have nothing to do with where their base actually is.
+
+          **Install:** drop the jar into `plugins/` and start the server. PacketEvents is bundled
+          and relocated, so there is nothing else to install.
+
+          Runs on Spigot, Paper, Folia and Folia forks such as CanvasMC. Requires Java 17+.
+
+          See the [README](https://github.com/Faboit1/PrivacyCoords#readme) for the commands, the
+          configuration, and the known limitations.
+          NOTES
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" target/PrivacyCoords-*.jar --clobber
+          else
+            gh release create "$tag" target/PrivacyCoords-*.jar \
+              --title "PrivacyCoords ${tag#v}" \
+              --notes-file "$notes"
+          fi

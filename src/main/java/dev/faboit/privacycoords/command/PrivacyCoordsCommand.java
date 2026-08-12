@@ -111,7 +111,7 @@ public final class PrivacyCoordsCommand implements CommandExecutor, TabCompleter
             sender.sendMessage(config.message("changed-other",
                     "player", target.getName(),
                     "state", config.rawMessage(enabled ? "state-on" : "state-off")));
-            target.sendMessage(config.message(enabled
+            tell(target, config.message(enabled
                     ? (immediate ? "enabled-now" : "enabled")
                     : (immediate ? "disabled-now" : "disabled")));
         }
@@ -127,7 +127,7 @@ public final class PrivacyCoordsCommand implements CommandExecutor, TabCompleter
             sender.sendMessage(config.message("rerolled"));
         } else {
             sender.sendMessage(config.message("rerolled-other", "player", target.getName()));
-            target.sendMessage(config.message("rerolled"));
+            tell(target, config.message("rerolled"));
         }
         if (config.isKickOnChange()) {
             kick(target, config);
@@ -159,10 +159,20 @@ public final class PrivacyCoordsCommand implements CommandExecutor, TabCompleter
         return value > 0 ? "+" + value : String.valueOf(value);
     }
 
+    /**
+     * Messages a player who is not the one who ran the command. On a regionised server they may be
+     * owned by a different thread than the one we are on, so this goes through their scheduler -
+     * which also keeps it ordered ahead of a kick queued straight after it.
+     */
+    private void tell(Player target, String message) {
+        plugin.getScheduler().runForPlayer(target, () -> target.sendMessage(message));
+    }
+
     private void kick(Player target, PrivacyCoordsConfig config) {
-        // Never kick from inside a packet or async context; the command already runs on the
-        // server thread, but scheduling keeps the ordering obvious if that ever changes.
-        Bukkit.getScheduler().runTask(plugin, () -> target.kickPlayer(config.getKickMessage()));
+        // Kicking has to happen on whichever thread owns the player. On a regionised server that
+        // is not necessarily the thread the command ran on, so this always goes through the
+        // scheduler rather than assuming.
+        plugin.getScheduler().runForPlayer(target, () -> target.kickPlayer(config.getKickMessage()));
     }
 
     @Override

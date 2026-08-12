@@ -2,11 +2,11 @@ package dev.faboit.privacycoords.listener;
 
 import dev.faboit.privacycoords.config.PrivacyCoordsConfig;
 import dev.faboit.privacycoords.offset.OffsetService;
+import dev.faboit.privacycoords.platform.PlatformScheduler;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.plugin.Plugin;
 
 /**
  * Reminds a player on join that what F3 shows them is not where they are, so nobody goes live
@@ -16,11 +16,11 @@ import org.bukkit.plugin.Plugin;
  */
 public final class JoinNoticeListener implements Listener {
 
-    private final Plugin plugin;
+    private final PlatformScheduler scheduler;
     private final OffsetService service;
 
-    public JoinNoticeListener(Plugin plugin, OffsetService service) {
-        this.plugin = plugin;
+    public JoinNoticeListener(PlatformScheduler scheduler, OffsetService service) {
+        this.scheduler = scheduler;
         this.service = service;
     }
 
@@ -32,8 +32,9 @@ public final class JoinNoticeListener implements Listener {
         }
 
         Player player = event.getPlayer();
-        // Delayed so the notice does not scroll past behind the join messages.
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+        // Delayed so the notice does not scroll past behind the join messages. On a regionised
+        // server this runs on the thread that owns the player, and is dropped if they leave first.
+        scheduler.runForPlayerLater(player, () -> {
             if (!player.isOnline() || !service.isActive(player.getUniqueId())) {
                 return;
             }
