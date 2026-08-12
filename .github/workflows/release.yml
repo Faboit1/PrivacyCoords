@@ -5,8 +5,8 @@ on:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Existing tag to build and publish, e.g. v1.1.0"
+      version:
+        description: "Version to release, without the leading v (must match the version in pom.xml)"
         required: true
 
 permissions:
@@ -22,7 +22,6 @@ jobs:
       - name: Check out
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Set up JDK 17
@@ -36,16 +35,21 @@ jobs:
         id: version
         run: |
           set -euo pipefail
-          tag="${{ inputs.tag || github.ref_name }}"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="v${{ inputs.version }}"
+          else
+            tag="${{ github.ref_name }}"
+          fi
           pom=$(mvn -B -ntp -q help:evaluate -Dexpression=project.version -DforceStdout)
-          echo "pom=$pom" >> "$GITHUB_OUTPUT"
-          # The tag and the version in the pom have to agree, or the jar in the release would be
-          # named something other than the release itself.
+          # The tag and the version in the pom have to agree, or the jar inside the release would
+          # be named something other than the release itself.
           if [ "${tag#v}" != "$pom" ]; then
             echo "::error::tag $tag does not match the project version $pom in pom.xml"
             exit 1
           fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "pom=$pom" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag from $(git rev-parse --short HEAD)"
 
       - name: Build
         run: mvn -B -ntp clean package
@@ -74,19 +78,28 @@ jobs:
           their whole world shifted by a random amount, so pressing F3 on stream shows coordinates
           that have nothing to do with where their base actually is.
 
-          **Install:** drop the jar into `plugins/` and start the server. PacketEvents is bundled
-          and relocated, so there is nothing else to install.
+          The shift lives entirely on the network layer. Every position the server sends that player
+          is moved by `+offset` and everything they send back is moved by `-offset`, so blocks,
+          entities, sounds, the world border and the compass all move together and the world behaves
+          exactly as it always did. Other players are unaffected.
 
-          Runs on Spigot, Paper, Folia and Folia forks such as CanvasMC. Requires Java 17+.
+          **Install:** drop the jar into `plugins/` and start the server. PacketEvents is bundled and
+          relocated, so there is nothing else to install.
 
-          See the [README](https://github.com/Faboit1/PrivacyCoords#readme) for the commands, the
-          configuration, and the known limitations.
+          Runs on Spigot, Paper, Folia and Folia forks such as CanvasMC. Requires Java 17 or newer.
+
+          Enable it with `/privacycoords enable`; every part of the plugin is configurable in
+          `config.yml`. See the [README](https://github.com/Faboit1/PrivacyCoords#readme) for the
+          commands, the configuration and the known limitations.
           NOTES
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" target/PrivacyCoords-*.jar --clobber
           else
+            # --target creates the tag at this commit when it does not already exist.
             gh release create "$tag" target/PrivacyCoords-*.jar \
+              --target "$GITHUB_SHA" \
               --title "PrivacyCoords ${tag#v}" \
               --notes-file "$notes"
           fi
+          gh release view "$tag"
